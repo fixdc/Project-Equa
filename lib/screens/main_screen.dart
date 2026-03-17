@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'login_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'login_screen.dart';
+import 'add_bill_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -12,20 +13,19 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
-
   late final List<Widget> _pages;
 
   @override
   void initState() {
     super.initState();
-    // Inisialisasi halaman sementara
     _pages = [
-   _buildHomePage(), // Kita ganti Beranda menjadi fungsi khusus ini
-   _buildDummyPage('Scan Struk', Icons.receipt_outlined, 'Kamera untuk scan struk otomatis'),
-   _buildProfilePage(),
- ];
+      _buildHomePage(),
+      _buildDummyPage('Scan Struk', Icons.receipt_outlined, 'Kamera untuk scan struk otomatis'),
+      _buildProfilePage(),
+    ];
   }
 
+  // 1. WIDGET HALAMAN SCAN (SEMENTARA)
   Widget _buildDummyPage(String title, IconData icon, String desc) {
     return Center(
       child: Column(
@@ -40,67 +40,240 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  // 2. WIDGET HALAMAN BERANDA (SUDAH TERKONEKSI DATABASE)
   Widget _buildHomePage() {
-final user = FirebaseAuth.instance.currentUser;
+    final user = FirebaseAuth.instance.currentUser;
 
-  // StreamBuilder agar status dan nama otomatis berubah secara realtime kalau di-update
-  return StreamBuilder<DocumentSnapshot>(
-    stream: FirebaseFirestore.instance.collection('users').doc(user?.uid).snapshots(),
-    builder: (context, snapshot) {
-      // Nilai bawaan sebelum data selesai di-load
-      String username = user?.displayName ?? 'User';
-      String status = 'Basic';
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance.collection('users').doc(user?.uid).snapshots(),
+      builder: (context, userSnapshot) {
+        String username = user?.displayName ?? 'User';
+        String status = 'Basic';
 
-      // Jika data dari database sudah terbaca
-      if (snapshot.hasData && snapshot.data!.exists) {
-        var data = snapshot.data!.data() as Map<String, dynamic>;
-        username = data['username'] ?? username;
-        status = data['status'] ?? 'Basic';
-      }
+        if (userSnapshot.hasData && userSnapshot.data!.exists) {
+          var data = userSnapshot.data!.data() as Map<String, dynamic>;
+          username = data['username'] ?? username;
+          status = data['status'] ?? 'Basic';
+        }
 
-      return Scaffold(
-        backgroundColor: Colors.white,
-        appBar: AppBar(
-          backgroundColor: Colors.white,
-          elevation: 0, // Menghilangkan bayangan garis bawah
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // Bagian Kiri: Sapaan Username
-              Text(
-                'Hi, $username 👋',
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
-              ),
+        // KODE DIPERBAIKI: Tarik SEMUA tagihan yang dibuat oleh akun ini (mengabaikan nama partisipan)
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('bills')
+              .where('createdBy', isEqualTo: user?.uid) 
+              .snapshots(),
+          builder: (context, billSnapshot) {
+            
+            double totalPengeluaran = 0; // Variabel Spotify Wrapped
+            List<QueryDocumentSnapshot> bills = [];
+
+            if (billSnapshot.hasData) {
+              bills = billSnapshot.data!.docs;
               
-              // Bagian Kanan: Badge Status (Basic / Premium)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: status == 'Premium' ? Colors.amber.shade100 : Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  status,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: status == 'Premium' ? Colors.amber.shade800 : Colors.grey.shade700,
-                  ),
+              // Urutkan tagihan dari yang paling baru
+              bills.sort((a, b) {
+                Timestamp tA = (a.data() as Map<String, dynamic>)['createdAt'] ?? Timestamp.now();
+                Timestamp tB = (b.data() as Map<String, dynamic>)['createdAt'] ?? Timestamp.now();
+                return tB.compareTo(tA);
+              });
+
+              // Hitung total sirkulasi uang dari SEMUA tagihan
+              for (var doc in bills) {
+                var data = doc.data() as Map<String, dynamic>;
+                totalPengeluaran += (data['totalAmount'] ?? 0).toDouble();
+              }
+            }
+
+            return Scaffold(
+              backgroundColor: Colors.white,
+              appBar: AppBar(
+                backgroundColor: Colors.white,
+                elevation: 0,
+                title: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Hi, $username 👋',
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: status == 'Premium' ? Colors.amber.shade100 : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        status,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: status == 'Premium' ? Colors.amber.shade800 : Colors.grey.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
-        body: const Center(
-          child: Text('Daftar Split Bill akan muncul di sini', style: TextStyle(color: Colors.grey)),
-        ),
-      );
-    },
-  );
+              body: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Kartu Ringkasan Tagihan (Vibe Spotify Wrapped)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Colors.blueAccent, Colors.lightBlue],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.blueAccent.withOpacity(0.3),
+                            blurRadius: 10,
+                            offset: const Offset(0, 5),
+                          )
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Total Pengeluaran Tongkronganmu',
+                            style: TextStyle(color: Colors.white70, fontSize: 14),
+                          ),
+                          const SizedBox(height: 8),
+                          // Menampilkan angka fantastis
+                          Text(
+                            'Rp ${totalPengeluaran.toStringAsFixed(0)}',
+                            style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed: () {},
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.white,
+                                    foregroundColor: Colors.blueAccent,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                  child: const Text('Bayar Utang'),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () {},
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                    side: const BorderSide(color: Colors.white),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                  child: const Text('Tagih Teman'),
+                                ),
+                              ),
+                            ],
+                          )
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    
+                    const Text(
+                      'Riwayat Split Bill',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Area Daftar Riwayat
+                    Expanded(
+                      child: bills.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.receipt_long, size: 64, color: Colors.grey.shade300),
+                                  const SizedBox(height: 16),
+                                  const Text('Belum ada tagihan nih.', style: TextStyle(color: Colors.grey, fontSize: 16)),
+                                  const Text('Yuk buat split bill pertamamu!', style: TextStyle(color: Colors.grey, fontSize: 14)),
+                                ],
+                              ),
+                            )
+                          : ListView.builder(
+                              itemCount: bills.length,
+                              itemBuilder: (context, index) {
+                                var data = bills[index].data() as Map<String, dynamic>;
+                                String title = data['title'] ?? 'Acara';
+                                double grandTotal = (data['totalAmount'] ?? 0).toDouble();
+                                String billStatus = data['status'] ?? 'Aktif';
+                                
+                                // Cek patungan spesifik untuk akun ini jika namanya ada di partisipan
+                                var splitResult = data['splitResult'] as Map<String, dynamic>? ?? {};
+                                double myShare = (splitResult['Kamu'] ?? splitResult[username] ?? 0.0).toDouble();
+
+                                return Card(
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    side: BorderSide(color: Colors.grey.shade200),
+                                  ),
+                                  color: Colors.grey.shade50,
+                                  elevation: 0,
+                                  child: ListTile(
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                    leading: CircleAvatar(
+                                      backgroundColor: billStatus == 'Aktif' ? Colors.blue.shade100 : Colors.green.shade100,
+                                      child: Icon(
+                                        billStatus == 'Aktif' ? Icons.receipt_long : Icons.check_circle,
+                                        color: billStatus == 'Aktif' ? Colors.blueAccent : Colors.green,
+                                      ),
+                                    ),
+                                    title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    subtitle: Text('Grand Total: Rp ${grandTotal.toStringAsFixed(0)}'),
+                                    trailing: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        const Text('Bagianmu', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                                        Text(
+                                          'Rp ${myShare.toStringAsFixed(0)}',
+                                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              floatingActionButton: FloatingActionButton(
+                onPressed: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const AddBillScreen()));
+                },
+                backgroundColor: Colors.blueAccent,
+                elevation: 4,
+                child: const Icon(Icons.add, color: Colors.white, size: 28),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
-  // Widget sementara untuk halaman Profil (Ada tombol logout-nya)
-  // Halaman Profil (Dilengkapi fitur Edit Username & Reset Password)
+  // 3. WIDGET HALAMAN PROFIL
   Widget _buildProfilePage() {
     final user = FirebaseAuth.instance.currentUser;
 
@@ -109,7 +282,6 @@ final user = FirebaseAuth.instance.currentUser;
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
       builder: (context, snapshot) {
-        // Tampilkan loading saat mengambil data
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -128,15 +300,12 @@ final user = FirebaseAuth.instance.currentUser;
           child: Column(
             children: [
               const SizedBox(height: 20),
-              // Foto Profil Default
               CircleAvatar(
                 radius: 50,
                 backgroundColor: Colors.blue.shade100,
                 child: const Icon(Icons.person, size: 50, color: Colors.blueAccent),
               ),
               const SizedBox(height: 16),
-              
-              // Nama dan Badge Status
               Text(
                 username,
                 style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
@@ -158,16 +327,13 @@ final user = FirebaseAuth.instance.currentUser;
               ),
               const SizedBox(height: 4),
               Text(user.email ?? '', style: const TextStyle(color: Colors.grey)),
-              
               const SizedBox(height: 40),
 
-              // Menu 1: Ganti Username
               ListTile(
                 leading: const Icon(Icons.edit, color: Colors.blueAccent),
                 title: const Text('Ganti Username'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
-                  // Munculkan Pop-up untuk ketik nama baru
                   TextEditingController nameController = TextEditingController(text: username);
                   showDialog(
                     context: context,
@@ -185,13 +351,11 @@ final user = FirebaseAuth.instance.currentUser;
                         ElevatedButton(
                           onPressed: () async {
                             if (nameController.text.trim().isNotEmpty) {
-                              // Update di Firebase Auth
                               await user.updateDisplayName(nameController.text.trim());
-                              // Update di Firestore Database
                               await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
                                 'username': nameController.text.trim(),
                               });
-                              if (context.mounted) Navigator.pop(context); // Tutup dialog
+                              if (context.mounted) Navigator.pop(context);
                             }
                           },
                           style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
@@ -211,7 +375,6 @@ final user = FirebaseAuth.instance.currentUser;
                   subtitle: const Text('Sekali bayar seumur hidup (Rp 5.000)'),
                   trailing: const Icon(Icons.payment, color: Colors.green),
                   onTap: () {
-                    // Munculkan Pop-up Simulasi Pembayaran
                     showDialog(
                       context: context,
                       builder: (context) => AlertDialog(
@@ -226,14 +389,11 @@ final user = FirebaseAuth.instance.currentUser;
                           ),
                           ElevatedButton(
                             onPressed: () async {
-                              // Simulasi proses bayar sukses, lalu update status di database
                               await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
                                 'status': 'Premium',
                               });
-                              
                               if (context.mounted) {
-                                Navigator.pop(context); // Tutup pop-up
-                                // Tampilkan notifikasi sukses
+                                Navigator.pop(context);
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text('Selamat! Akun kamu sekarang Premium! 🌟'),
@@ -253,7 +413,6 @@ final user = FirebaseAuth.instance.currentUser;
                 const Divider(),
               ],
 
-              // Menu 2: Ganti Password (Kirim Email Reset)
               ListTile(
                 leading: const Icon(Icons.lock_reset, color: Colors.blueAccent),
                 title: const Text('Ganti Password'),
@@ -277,7 +436,6 @@ final user = FirebaseAuth.instance.currentUser;
               ),
               const Divider(),
 
-              // Menu 3: Logout
               ListTile(
                 leading: const Icon(Icons.logout, color: Colors.redAccent),
                 title: const Text('Logout', style: TextStyle(color: Colors.redAccent)),
@@ -302,109 +460,7 @@ final user = FirebaseAuth.instance.currentUser;
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      // Tampilkan halaman sesuai index yang dipilih
-      body: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 1. Kartu Ringkasan Tagihan
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.blueAccent,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.blueAccent.withOpacity(0.3),
-                        blurRadius: 10,
-                        offset: const Offset(0, 5),
-                      )
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Total Tagihan Aktif',
-                        style: TextStyle(color: Colors.white70, fontSize: 14),
-                      ),
-                      const SizedBox(height: 8),
-                      // Nanti angka ini akan kita ambil dari database perhitungannya
-                      const Text(
-                        'Rp 0',
-                        style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: () {},
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                foregroundColor: Colors.blueAccent,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                              child: const Text('Bayar Utang'),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () {},
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.white,
-                                side: const BorderSide(color: Colors.white),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                              child: const Text('Tagih Teman'),
-                            ),
-                          ),
-                        ],
-                      )
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 32),
-                
-                // 2. Judul Riwayat
-                const Text(
-                  'Riwayat Split Bill',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
-                ),
-                const SizedBox(height: 16),
-                
-                // 3. Area Daftar Riwayat (Sementara kita buat kosong/empty state)
-                Expanded(
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.receipt_long, size: 64, color: Colors.grey.shade300),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Belum ada tagihan nih.',
-                          style: TextStyle(color: Colors.grey, fontSize: 16),
-                        ),
-                        const Text(
-                          'Yuk buat split bill pertamamu!',
-                          style: TextStyle(color: Colors.grey, fontSize: 14),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-      
-      // Bottom Navigation bergaya Material 3
+      body: SafeArea(child: _pages[_selectedIndex]),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (int index) {
@@ -413,31 +469,20 @@ final user = FirebaseAuth.instance.currentUser;
           });
         },
         backgroundColor: Colors.white,
-        indicatorColor: Colors.blue.shade100, // Warna kotak highlight
-        
-        // 1. KODE INI UNTUK MENGHAPUS SEMUA TULISAN
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysHide, 
-        
-        // 2. MENGATUR TINGGI BAR AGAR PAS DENGAN ICON BESAR
-        height: 65, 
-        
+        indicatorColor: Colors.blue.shade100,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
+        height: 65,
         destinations: const [
-          // Tab 1: Beranda
           NavigationDestination(
-            // 3. ICON DIPERBESAR MENJADI SIZE 32 & DIPILIH YANG LEBIH SIMPEL
             icon: Icon(Icons.home_outlined, size: 32, color: Colors.black87),
             selectedIcon: Icon(Icons.home, size: 32, color: Colors.blueAccent),
-            label: 'Home', // Label tetap wajib ditulis di kode, tapi tidak akan muncul di layar
+            label: 'Home',
           ),
-          
-          // Tab 2: Scan Struk (Icon diganti yang lebih simpel)
           NavigationDestination(
             icon: Icon(Icons.receipt_outlined, size: 32, color: Colors.black87),
             selectedIcon: Icon(Icons.receipt, size: 32, color: Colors.blueAccent),
             label: 'Scan',
           ),
-          
-          // Tab 3: Profil
           NavigationDestination(
             icon: Icon(Icons.person_outline, size: 32, color: Colors.black87),
             selectedIcon: Icon(Icons.person, size: 32, color: Colors.blueAccent),
