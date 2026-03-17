@@ -66,6 +66,7 @@ class _MainScreenState extends State<MainScreen> {
             
             double totalPengeluaran = 0; 
             List<QueryDocumentSnapshot> bills = [];
+            
 
             if (billSnapshot.hasData) {
               bills = billSnapshot.data!.docs;
@@ -87,9 +88,9 @@ class _MainScreenState extends State<MainScreen> {
               appBar: AppBar(
                 backgroundColor: Colors.white,
                 elevation: 0,
+                titleSpacing: 24.0,
                 title: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        
                   children: [
                     Text(
                       'Hi, $username 👋',
@@ -276,13 +277,18 @@ class _MainScreenState extends State<MainScreen> {
                   ],
                 ),
               ),
-              floatingActionButton: FloatingActionButton(
-                onPressed: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const AddBillScreen()));
-                },
-                backgroundColor: Colors.blueAccent,
-                elevation: 4,
-                child: const Icon(Icons.add, color: Colors.white, size: 28),
+              floatingActionButton: Padding(
+                padding: const EdgeInsets.only(right: 8.0, bottom: 8.0), // Tambahkan jarak di sini
+                child: FloatingActionButton(
+                  onPressed: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const AddBillScreen()));
+                  },
+                  backgroundColor: Colors.blueAccent,
+                  elevation: 4,
+                  // Gunakan bentuk rounded sesuai gambar referensimu
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), 
+                  child: const Icon(Icons.add, color: Colors.white, size: 28),
+                ),
               ),
             );
           },
