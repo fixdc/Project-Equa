@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "122736298446",
+    "project_id": "equa-2c7c7",
+    "storage_bucket": "equa-2c7c7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:122736298446:android:36d484432683de48f5839f",
+        "android_client_info": {
+          "package_name": "com.example.equa"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB2kw2_Nsm0m-usoPn6OF7n5ISSPN4lXOg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
