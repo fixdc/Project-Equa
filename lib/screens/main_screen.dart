@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'login_screen.dart';
 import 'add_bill_screen.dart';
+import 'bill_detail_screen.dart';
+import 'leaderboard_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -25,7 +27,6 @@ class _MainScreenState extends State<MainScreen> {
     ];
   }
 
-  // 1. WIDGET HALAMAN SCAN (SEMENTARA)
   Widget _buildDummyPage(String title, IconData icon, String desc) {
     return Center(
       child: Column(
@@ -40,7 +41,7 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  // 2. WIDGET HALAMAN BERANDA (SUDAH TERKONEKSI DATABASE)
+  // WIDGET HALAMAN BERANDA
   Widget _buildHomePage() {
     final user = FirebaseAuth.instance.currentUser;
 
@@ -56,7 +57,6 @@ class _MainScreenState extends State<MainScreen> {
           status = data['status'] ?? 'Basic';
         }
 
-        // KODE DIPERBAIKI: Tarik SEMUA tagihan yang dibuat oleh akun ini (mengabaikan nama partisipan)
         return StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance
               .collection('bills')
@@ -64,20 +64,18 @@ class _MainScreenState extends State<MainScreen> {
               .snapshots(),
           builder: (context, billSnapshot) {
             
-            double totalPengeluaran = 0; // Variabel Spotify Wrapped
+            double totalPengeluaran = 0; 
             List<QueryDocumentSnapshot> bills = [];
 
             if (billSnapshot.hasData) {
               bills = billSnapshot.data!.docs;
               
-              // Urutkan tagihan dari yang paling baru
               bills.sort((a, b) {
                 Timestamp tA = (a.data() as Map<String, dynamic>)['createdAt'] ?? Timestamp.now();
                 Timestamp tB = (b.data() as Map<String, dynamic>)['createdAt'] ?? Timestamp.now();
                 return tB.compareTo(tA);
               });
 
-              // Hitung total sirkulasi uang dari SEMUA tagihan
               for (var doc in bills) {
                 var data = doc.data() as Map<String, dynamic>;
                 totalPengeluaran += (data['totalAmount'] ?? 0).toDouble();
@@ -91,6 +89,7 @@ class _MainScreenState extends State<MainScreen> {
                 elevation: 0,
                 title: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        
                   children: [
                     Text(
                       'Hi, $username 👋',
@@ -119,7 +118,6 @@ class _MainScreenState extends State<MainScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Kartu Ringkasan Tagihan (Vibe Spotify Wrapped)
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(20),
@@ -146,43 +144,35 @@ class _MainScreenState extends State<MainScreen> {
                             style: TextStyle(color: Colors.white70, fontSize: 14),
                           ),
                           const SizedBox(height: 8),
-                          // Menampilkan angka fantastis
                           Text(
                             'Rp ${totalPengeluaran.toStringAsFixed(0)}',
                             style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: ElevatedButton(
-                                  onPressed: () {},
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.white,
-                                    foregroundColor: Colors.blueAccent,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                  ),
-                                  child: const Text('Bayar Utang'),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: () {
+                                // Pindah ke halaman Peringkat
+                                Navigator.push(
+                                  context, 
+                                  MaterialPageRoute(builder: (context) => const LeaderboardScreen())
+                                );
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                foregroundColor: Colors.blueAccent,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed: () {},
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: Colors.white,
-                                    side: const BorderSide(color: Colors.white),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                  ),
-                                  child: const Text('Tagih Teman'),
-                                ),
+                              child: const Text(
+                                'Lihat pengeluaran teman temanmu',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                               ),
-                            ],
-                          )
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -194,7 +184,6 @@ class _MainScreenState extends State<MainScreen> {
                     ),
                     const SizedBox(height: 16),
                     
-                    // Area Daftar Riwayat
                     Expanded(
                       child: bills.isEmpty
                           ? Center(
@@ -204,7 +193,6 @@ class _MainScreenState extends State<MainScreen> {
                                   Icon(Icons.receipt_long, size: 64, color: Colors.grey.shade300),
                                   const SizedBox(height: 16),
                                   const Text('Belum ada tagihan nih.', style: TextStyle(color: Colors.grey, fontSize: 16)),
-                                  const Text('Yuk buat split bill pertamamu!', style: TextStyle(color: Colors.grey, fontSize: 14)),
                                 ],
                               ),
                             )
@@ -216,9 +204,16 @@ class _MainScreenState extends State<MainScreen> {
                                 double grandTotal = (data['totalAmount'] ?? 0).toDouble();
                                 String billStatus = data['status'] ?? 'Aktif';
                                 
-                                // Cek patungan spesifik untuk akun ini jika namanya ada di partisipan
                                 var splitResult = data['splitResult'] as Map<String, dynamic>? ?? {};
                                 double myShare = (splitResult['Kamu'] ?? splitResult[username] ?? 0.0).toDouble();
+
+                                // FORMAT WAKTU UNTUK DITAMPILKAN DI LIST
+                                Timestamp? t = data['createdAt'] as Timestamp?;
+                                String dateString = '';
+                                if (t != null) {
+                                  DateTime d = t.toDate();
+                                  dateString = '${d.day.toString().padLeft(2,'0')}/${d.month.toString().padLeft(2,'0')}/${d.year} ${d.hour.toString().padLeft(2,'0')}:${d.minute.toString().padLeft(2,'0')}';
+                                }
 
                                 return Card(
                                   margin: const EdgeInsets.only(bottom: 12),
@@ -228,27 +223,50 @@ class _MainScreenState extends State<MainScreen> {
                                   ),
                                   color: Colors.grey.shade50,
                                   elevation: 0,
-                                  child: ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                    leading: CircleAvatar(
-                                      backgroundColor: billStatus == 'Aktif' ? Colors.blue.shade100 : Colors.green.shade100,
-                                      child: Icon(
-                                        billStatus == 'Aktif' ? Icons.receipt_long : Icons.check_circle,
-                                        color: billStatus == 'Aktif' ? Colors.blueAccent : Colors.green,
-                                      ),
-                                    ),
-                                    title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                    subtitle: Text('Grand Total: Rp ${grandTotal.toStringAsFixed(0)}'),
-                                    trailing: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      crossAxisAlignment: CrossAxisAlignment.end,
-                                      children: [
-                                        const Text('Bagianmu', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                                        Text(
-                                          'Rp ${myShare.toStringAsFixed(0)}',
-                                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent),
+                                  child: InkWell( // MENGGUNAKAN INKWELL AGAR BISA DI-KLIK
+                                    borderRadius: BorderRadius.circular(12),
+                                    onTap: () {
+                                      // KODE BARU: PINDAH KE HALAMAN DETAIL SAAT DI-KLIK
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => BillDetailScreen(
+                                            billData: data,
+                                            billId: bills[index].id,
+                                          ),
                                         ),
-                                      ],
+                                      );
+                                    },
+                                    child: ListTile(
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                      leading: CircleAvatar(
+                                        backgroundColor: billStatus == 'Aktif' ? Colors.blue.shade100 : Colors.green.shade100,
+                                        child: Icon(
+                                          billStatus == 'Aktif' ? Icons.receipt_long : Icons.check_circle,
+                                          color: billStatus == 'Aktif' ? Colors.blueAccent : Colors.green,
+                                        ),
+                                      ),
+                                      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                      subtitle: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const SizedBox(height: 4),
+                                          Text('Total: Rp ${grandTotal.toStringAsFixed(0)}'),
+                                          // KODE BARU: MENAMPILKAN TANGGAL
+                                          Text(dateString, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                        ],
+                                      ),
+                                      trailing: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        crossAxisAlignment: CrossAxisAlignment.end,
+                                        children: [
+                                          const Text('Bagianmu', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                                          Text(
+                                            'Rp ${myShare.toStringAsFixed(0)}',
+                                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 );
@@ -273,18 +291,15 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  // 3. WIDGET HALAMAN PROFIL
+  // WIDGET HALAMAN PROFIL
   Widget _buildProfilePage() {
     final user = FirebaseAuth.instance.currentUser;
-
     if (user == null) return const Center(child: Text('Tidak ada user aktif'));
 
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
+        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
 
         String username = user.displayName ?? 'User';
         String status = 'Basic';
@@ -306,24 +321,12 @@ class _MainScreenState extends State<MainScreen> {
                 child: const Icon(Icons.person, size: 50, color: Colors.blueAccent),
               ),
               const SizedBox(height: 16),
-              Text(
-                username,
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
+              Text(username, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: status == 'Premium' ? Colors.amber.shade100 : Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  status,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: status == 'Premium' ? Colors.amber.shade800 : Colors.grey.shade700,
-                  ),
-                ),
+                decoration: BoxDecoration(color: status == 'Premium' ? Colors.amber.shade100 : Colors.grey.shade200, borderRadius: BorderRadius.circular(20)),
+                child: Text(status, style: TextStyle(fontWeight: FontWeight.bold, color: status == 'Premium' ? Colors.amber.shade800 : Colors.grey.shade700)),
               ),
               const SizedBox(height: 4),
               Text(user.email ?? '', style: const TextStyle(color: Colors.grey)),
@@ -339,22 +342,14 @@ class _MainScreenState extends State<MainScreen> {
                     context: context,
                     builder: (context) => AlertDialog(
                       title: const Text('Ganti Username'),
-                      content: TextField(
-                        controller: nameController,
-                        decoration: const InputDecoration(hintText: "Masukkan username baru"),
-                      ),
+                      content: TextField(controller: nameController, decoration: const InputDecoration(hintText: "Masukkan username baru")),
                       actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Batal', style: TextStyle(color: Colors.grey)),
-                        ),
+                        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal', style: TextStyle(color: Colors.grey))),
                         ElevatedButton(
                           onPressed: () async {
                             if (nameController.text.trim().isNotEmpty) {
                               await user.updateDisplayName(nameController.text.trim());
-                              await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-                                'username': nameController.text.trim(),
-                              });
+                              await FirebaseFirestore.instance.collection('users').doc(user.uid).update({'username': nameController.text.trim()});
                               if (context.mounted) Navigator.pop(context);
                             }
                           },
@@ -379,27 +374,15 @@ class _MainScreenState extends State<MainScreen> {
                       context: context,
                       builder: (context) => AlertDialog(
                         title: const Text('Beli Premium'),
-                        content: const Text(
-                          'Dapatkan akses fitur tak terbatas hanya dengan Rp 5.000. Lanjutkan pembayaran?',
-                        ),
+                        content: const Text('Dapatkan akses fitur tak terbatas hanya dengan Rp 5.000. Lanjutkan pembayaran?'),
                         actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text('Batal', style: TextStyle(color: Colors.grey)),
-                          ),
+                          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal', style: TextStyle(color: Colors.grey))),
                           ElevatedButton(
                             onPressed: () async {
-                              await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-                                'status': 'Premium',
-                              });
+                              await FirebaseFirestore.instance.collection('users').doc(user.uid).update({'status': 'Premium'});
                               if (context.mounted) {
                                 Navigator.pop(context);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Selamat! Akun kamu sekarang Premium! 🌟'),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
+                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Selamat! Akun kamu sekarang Premium! 🌟'), backgroundColor: Colors.green));
                               }
                             },
                             style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade400),
@@ -420,17 +403,9 @@ class _MainScreenState extends State<MainScreen> {
                 onTap: () async {
                   try {
                     await FirebaseAuth.instance.sendPasswordResetEmail(email: user.email!);
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Link ganti password telah dikirim ke email kamu!')),
-                      );
-                    }
+                    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link ganti password telah dikirim ke email kamu!')));
                   } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Gagal mengirim email reset')),
-                      );
-                    }
+                    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gagal mengirim email reset')));
                   }
                 },
               ),
@@ -441,12 +416,7 @@ class _MainScreenState extends State<MainScreen> {
                 title: const Text('Logout', style: TextStyle(color: Colors.redAccent)),
                 onTap: () async {
                   await FirebaseAuth.instance.signOut();
-                  if (context.mounted) {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (context) => const LoginScreen()),
-                    );
-                  }
+                  if (context.mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
                 },
               ),
             ],
@@ -473,21 +443,9 @@ class _MainScreenState extends State<MainScreen> {
         labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
         height: 65,
         destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined, size: 32, color: Colors.black87),
-            selectedIcon: Icon(Icons.home, size: 32, color: Colors.blueAccent),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.receipt_outlined, size: 32, color: Colors.black87),
-            selectedIcon: Icon(Icons.receipt, size: 32, color: Colors.blueAccent),
-            label: 'Scan',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline, size: 32, color: Colors.black87),
-            selectedIcon: Icon(Icons.person, size: 32, color: Colors.blueAccent),
-            label: 'Profile',
-          ),
+          NavigationDestination(icon: Icon(Icons.home_outlined, size: 32, color: Colors.black87), selectedIcon: Icon(Icons.home, size: 32, color: Colors.blueAccent), label: 'Home'),
+          NavigationDestination(icon: Icon(Icons.receipt_outlined, size: 32, color: Colors.black87), selectedIcon: Icon(Icons.receipt, size: 32, color: Colors.blueAccent), label: 'Scan'),
+          NavigationDestination(icon: Icon(Icons.person_outline, size: 32, color: Colors.black87), selectedIcon: Icon(Icons.person, size: 32, color: Colors.blueAccent), label: 'Profile'),
         ],
       ),
     );
